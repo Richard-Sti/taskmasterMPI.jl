@@ -1,9 +1,9 @@
 """
-    get_free_worker(comm::MPI.Comm)
+    get_worker(comm::MPI.Comm)
 
-Get a free worked from process of rank ≥ 1 as signalled from `worker_process`.
+Get a free worker from process of rank ≥ 1 as signalled from `worker_process`.
 """
-function get_free_worker(comm::MPI.Comm)
+function get_worker(comm::MPI.Comm)
     size = MPI.Comm_size(comm)
     # Go through the workes until signal from at least one that it's free
     for worker in 1:(size - 1)
@@ -53,7 +53,7 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; 
     tasks = append!(fill!(Vector{Any}(undef, size - 1), nothing), tasks)
 
     while length(tasks) > 0
-        worker = get_free_worker(comm)
+        worker = get_worker(comm)
 
         # Send a job to a free worker
         if ~isnan(worker)
