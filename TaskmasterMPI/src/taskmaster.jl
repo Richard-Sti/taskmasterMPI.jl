@@ -39,12 +39,12 @@ end
 
 
 """
-    master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1)
+    master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; verbose::Bool=false)
 
 The master, delegating process. Checks if any rank ≥ 1 processes are available and if they
 are assigns them work.
 """
-function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1)
+function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; verbose::Bool=false)
     # Check there are no nothing as those are the stopping condition.
     size = MPI.Comm_size(comm)
     @assert ~any(isnothing.(tasks)) "`tasks` cannot contain `nothing`."
@@ -58,7 +58,10 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1)
         # Send a job to a free worker
         if ~isnan(worker)
             task = pop!(tasks)
-            println("Sending $task to worker $worker")
+            if verbose
+                println("Sending $task to worker $worker.")
+                flush(stdout)
+            end
             MPI.send(task, worker, tag(comm, worker), comm)
         end
         # Snooze to avoid refreshing this loop too often
@@ -68,11 +71,11 @@ end
 
 
 """"
-    worker_process(comm::MPI.Comm)
+    worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
 
-The worker process of rank ≥ 1 that performs the work.
+The worker process of rank ≥ 1 that evaluates `func(task)`.
 """
-function worker_process(comm::MPI.Comm)
+function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
     rank = MPI.Comm_rank(comm)
     while true
         # Send a signal that prepared to work
@@ -84,7 +87,11 @@ function worker_process(comm::MPI.Comm)
             break
         end
 
-        println("Rank $rank received task $task.. Working very hard.")
-        sleep(1)
+        if verbose
+            println("Rank $rank received task $task.")
+            flush(stdout)
+        end
+        # Evaluate
+        func(task)
     end
 end
