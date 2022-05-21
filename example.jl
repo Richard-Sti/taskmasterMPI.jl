@@ -6,12 +6,11 @@ activate("./TaskmasterMPI/.")
 using TaskmasterMPI
 
 
-
 MPI.Init()
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 
-
+# Example function we would like to evaluate
 f(x) = sleep(rand())
 
 
