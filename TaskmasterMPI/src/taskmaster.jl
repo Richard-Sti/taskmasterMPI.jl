@@ -50,7 +50,7 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; 
     @assert ~any(isnothing.(tasks)) "`tasks` cannot contain `nothing`."
     @assert size > 1 "MPI size must be ≥ 1."
     # Make a copy of the tasks append at the front terminating conditions
-    tasks = append!(fill!(Vector{Any}(undef, size - 1), nothing), tasks)
+    tasks = append!(fill!(Vector{Any}(undef, size - 1), nothing), deepcopy(tasks))
 
     while length(tasks) > 0
         worker = get_worker(comm)
@@ -59,7 +59,7 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; 
         if ~isnan(worker)
             task = pop!(tasks)
             if verbose
-                println("Sending $task to worker $worker.")
+                println("Sending $task to worker $worker. Remaining $(length(tasks) - size + 1).")
                 flush(stdout)
             end
             MPI.send(task, worker, tag(comm, worker), comm)
@@ -84,6 +84,7 @@ function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
         task, __ = MPI.recv(0, tag(comm), comm)
         # Stopping condition        
         if isnothing(task)
+            println("Closing rank $rank.")
             break
         end
 
