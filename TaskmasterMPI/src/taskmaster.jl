@@ -59,7 +59,7 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; 
         if ~isnan(worker)
             task = pop!(tasks)
             if verbose
-                println("Sending $task to worker $worker. Remaining $(length(tasks) - size + 1).")
+                println("Sending $task to worker $worker at $(now()). Remaining $(length(tasks) - size + 1).")
                 flush(stdout)
             end
             MPI.send(task, worker, tag(comm, worker), comm)
