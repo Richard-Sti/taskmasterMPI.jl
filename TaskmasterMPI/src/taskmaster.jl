@@ -59,7 +59,7 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; 
         if ~isnan(worker)
             task = pop!(tasks)
             if verbose
-                time = Dates.format(now(), "HH:MM")
+                time = Dates.format(Dates.now(), "HH:MM")
                 println("Sending $task to worker $worker at $time. Remaining $(length(tasks) - size + 1).")
                 flush(stdout)
             end
