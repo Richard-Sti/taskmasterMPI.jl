@@ -1,7 +1,7 @@
 module TaskmasterMPI
 
 import MPI
-import Dates: now
+import Dates
 
 
 export get_free_worker, tag, master_process, worker_process
