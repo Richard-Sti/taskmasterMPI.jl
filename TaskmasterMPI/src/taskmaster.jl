@@ -1,103 +1,137 @@
+# Copyright (C) 2023 Richard Stiskalek
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using MPI
 using Dates
 
+function current_time()
+    return Dates.format(now(), "HH:MM:SS")
+end
 
-"""
-    get_worker(comm::MPI.Comm)
 
-Get a free worker from process of rank ≥ 1 as signalled from `worker_process`.
-"""
 function get_worker(comm::MPI.Comm)
+    status = MPI.Probe(MPI.ANY_SOURCE, MPI.ANY_TAG, comm)
+    return status.source
+end
+
+
+function master_process(tasks::Vector{<:Any}, comm::MPI.Comm; verbose::Bool=false)
     size = MPI.Comm_size(comm)
-    # Go through the workes until signal from at least one that it's free
-    for worker in 1:(size - 1)
-        flag, __, __ = MPI.irecv(worker, tag(comm, worker), comm)
 
-        if flag
-            return worker
-        end
-    end
-    # Otherwise simply return NaN
-    return NaN
-end
-
-
-"""
-    tag(comm::MPI.Comm, rank::Integer)
-
-Return a tag ID of MPI size + the specified rank.
-"""
-function tag(comm::MPI.Comm, rank::Integer)
-    return rank + MPI.Comm_size(comm)
-end
-
-
-"""
-    tag(comm::MPI.Comm)
-
-Return a tag ID of MPI size + the current rank.
-"""
-function tag(comm::MPI.Comm)
-    return MPI.Comm_rank(comm) + MPI.Comm_size(comm)
-end
-
-
-"""
-    master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; verbose::Bool=false)
-
-The master, delegating process. Checks if any rank ≥ 1 processes are available and if they
-are assigns them work.
-"""
-function master_process(tasks::Vector{<:Any}, comm::MPI.Comm, snooze::Real=0.1; verbose::Bool=false)
-    # Check there are no nothing as those are the stopping condition.
-    size = MPI.Comm_size(comm)
-    @assert ~any(isnothing.(tasks)) "`tasks` cannot contain `nothing`."
+    @assert !any(isnothing, tasks) "`tasks` cannot contain `nothing`."
     @assert size > 1 "MPI size must be ≥ 1."
-    # Make a copy of the tasks append at the front terminating conditions
-    tasks = append!(fill!(Vector{Any}(undef, size - 1), nothing), deepcopy(tasks))
 
-    while length(tasks) > 0
+    tasks = append!(fill(nothing, size - 1), tasks)
+    total_tasks = length(tasks) - size + 1
+
+    results = Vector{Vector{Any}}()
+
+    for task in tasks
         worker = get_worker(comm)
 
-        # Send a job to a free worker
-        if ~isnan(worker)
-            task = pop!(tasks)
-            if verbose
-                time = Dates.format(Dates.now(), "HH:MM")
-                println("Sending $task to worker $worker at $time. Remaining $(length(tasks) - size + 1).")
-                flush(stdout)
-            end
-            MPI.send(task, worker, tag(comm, worker), comm)
+        if verbose
+            println("$(current_time()): sending $task to worker $worker. Remaining $(total_tasks) tasks.")
         end
-        # Snooze to avoid refreshing this loop too often
-        sleep(snooze)
+
+        MPI.send(task, worker, worker, comm)
+
+        result_vector = MPI.recv(worker, worker, comm)
+        push!(results, result_vector)
+
+        total_tasks -= 1
     end
+
+    return results
 end
 
 
-""""
-    worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
-
-The worker process of rank ≥ 1 that evaluates `func(task)`.
-"""
 function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
     rank = MPI.Comm_rank(comm)
+
     while true
-        # Send a signal that prepared to work
-        MPI.send(0, 0, tag(comm), comm)
-        # Receive a new task
-        task, __ = MPI.recv(0, tag(comm), comm)
-        # Stopping condition        
+        # Inform master that you are ready for a task
+        MPI.send(0, 0, rank, comm)
+
+        # Receive the task from the master
+        task, status = MPI.recv(0, rank, comm)
+
         if isnothing(task)
-            println("Closing rank $rank.")
+            if verbose
+                println("$(current_time()): closing rank $rank.")
+            end
             break
         end
 
         if verbose
-            println("Rank $rank received task $task.")
-            flush(stdout)
+            println("$(current_time()): rank $rank received task $task.")
         end
-        # Evaluate
-        func(task)
+
+        result_vector = func(task)
+
+        MPI.send(result_vector, 0, rank, comm)
+    end
+end
+
+
+"""
+    work_delegation(func::Function, tasks::Vector{<:Any}, comm::MPI.Comm;
+                    master_verbose::Bool=true, worker_verbose::Bool=false) -> Vector{Vector{Any}}
+
+Delegate tasks for parallel evaluation using MPI. In the case of multiple processes,
+the tasks are split between the master and worker processes. For single processes,
+tasks are executed directly and results are returned.
+
+# Arguments
+- `func`: A function that takes a single task and produces a vector of results.
+- `tasks`: A list of tasks to be processed.
+- `comm`: The MPI communicator object, typically `MPI.COMM_WORLD`.
+
+# Keyword Arguments
+- `master_verbose=true`: If `true`, master prints out its activity.
+- `worker_verbose=false`: If `true`, worker processes print out their activity.
+
+# Returns
+- If the process is the master, a list of result vectors corresponding to each task.
+  Otherwise, nothing for worker processes.
+
+# Notes
+- When you use multiple MPI processes, only the master will return the results.
+On single processes, it directly processes and returns the results.
+- Make sure MPI is initialized before invoking this function, usually via MPI.Init()
+and finalized after, usually via MPI.Finalize().
+"""
+function work_delegation(func::Function, tasks::Vector{<:Any}, comm::MPI.Comm;
+                         master_verbose::Bool=true, worker_verbose::Bool=false)
+    if MPI.Comm_size(comm) > 1
+        if MPI.Comm_rank(comm) == 0
+            results = master_process(tasks, comm, verbose=master_verbose)
+            return results
+        else
+            worker_process(func, comm, verbose=worker_verbose)
+            return nothing
+        end
+    else
+        results = Vector{Vector{Any}}()
+        for task in tasks
+            if master_verbose
+                println("$(current_time()): completing task '$task'.")
+            end
+
+            result_vector = func(task)
+            push!(results, result_vector)
+        end
+
+        return results
     end
 end
