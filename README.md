@@ -37,6 +37,12 @@ Follow the steps below to manually download and install the `TaskmasterMPI` pack
     using TaskmasterMPI
     ```
 
+## Dependencies
+
+The `TaskmasterMPI` package requires the following dependencies:
+
+- **MPI.jl**
+
 ## Usage
 
 The primary function in `TaskmasterMPI.jl` is `work_delegation()`. This function delegates tasks for parallel evaluation using MPI.
