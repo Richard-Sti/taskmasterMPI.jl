@@ -1,9 +1,9 @@
 # TaskmasterMPI.jl
 
-`TaskmasterMPI.jl` is a Julia package designed to efficiently delegate tasks for parallel evaluation using MPI.
+`TaskmasterMPI.jl` is a Julia package designed to efficiently delegate tasks for parallel evaluation using the Message Passing Interface (MPI).
 
 ## Features
-- **MPI Integration**: Seamless communication between master and worker processes using the Message Passing Interface (MPI).
+- **MPI Integration**: Seamless communication between master and worker processes using the MPI.
 - **Verbose Mode**: Monitoring task delegation, reception, and completion with optional verbose output.
 - **Flexible Task Execution**: Delegation of tasks for both single and multiple MPI processes.
 
@@ -69,6 +69,18 @@ end
 ```
 
 Please refer to inline documentation for detailed function parameters and usage. Similar example is included in the script `example.jl`.
+
+### Function Explanation: `work_delegation`
+
+The `work_delegation` function is designed to delegate tasks for parallel processing using MPI.
+
+#### Output:
+
+The function returns a `Vector{Vector{Any}}`, which is essentially a list of vectors. Each inner vector represents the result of a single task. For instance, if you pass in a list of 10 tasks, the function will return a list of 10 vectors, with each inner vector being the output of its corresponding task.
+
+#### Task Requirements:
+
+Each task should be a function that, when executed, returns a vector. This is a strict requirement, and even if there's no explicit output from a task, it should return an empty vector (`[]`). This ensures consistency in the output format, making post-processing and data extraction simpler.
 
 
 ## Authors
