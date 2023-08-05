@@ -23,11 +23,12 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 
 function f(x)
-    sleep(0.1 * rand())
+    sleep(1 * rand())
     return [x, x^0.5]
 end
 
-tasks = Vector(3:100)
+# tasks = Vector(3:100)
+tasks = Float64.(Vector(3:50))
 res = work_delegation(f, tasks, comm)
 
 if rank == 0
