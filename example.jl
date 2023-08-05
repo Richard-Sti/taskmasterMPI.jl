@@ -15,7 +15,7 @@
 using MPI, DataFrames
 
 import Pkg: activate
-activate("./TaskmasterMPI/.")
+activate(".")
 using TaskmasterMPI
 
 MPI.Init()
