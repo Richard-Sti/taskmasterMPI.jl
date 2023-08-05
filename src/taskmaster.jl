@@ -24,36 +24,38 @@ function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
 
     while true
         # Receive a task from the master or stop signal.
-        task = MPI.recv(comm, source=0, tag=0)
+        task = MPI.recv(comm; source=0, tag=0)
 
         if task == STOP
             break
         end
 
+        index, task = task
+
         verbose && println("$(ctime()): rank $rank received task $task.")
 
         result = func(task)
-        MPI.send(result, comm, dest=0, tag=1)
+        MPI.send([index, result], comm; dest=0, tag=1)
     end
 end
 
 
-function master_process(tasks::Vector{<:Any}, comm::MPI.Comm; verbose::Bool=false)
+function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Bool=false)
     num_workers = MPI.Comm_size(comm) - 1
     num_tasks = length(tasks)
     completed_tasks = 0
     tasks_sent = 0
 
-    results = Vector{Any}()
+    results = Vector{Any}(undef, num_tasks)
+    # results = Vector{Any}()
 
     # Initially distribute tasks to workers
     for worker_rank = 1:min(num_workers, num_tasks)
         task = tasks[worker_rank]
         verbose && println("$(ctime()): sending task $task to worker $worker_rank.")
-        MPI.send(task, comm, dest=worker_rank, tag=0)
+        MPI.send([worker_rank, task], comm; dest=worker_rank, tag=0)
         tasks_sent += 1
     end
-
 
     while completed_tasks < num_tasks
         # Block until there is a worker sending back results.
@@ -62,25 +64,29 @@ function master_process(tasks::Vector{<:Any}, comm::MPI.Comm; verbose::Bool=fals
 
         verbose && println("$(ctime()): receiving from worker $worker_rank.")
 
-        result = MPI.recv(comm, source=worker_rank, tag=1)
+        result = MPI.recv(comm; source=worker_rank, tag=1)
+        index, result = result
 
-        push!(results, result)
+        # Check that the index is valid. If its e.g. 2.0 convert to Int
+        msg = "Received an invalid index `$index` from worker `$worker_rank`."
+        isa(index, Real) || error(msg)
+        isinteger(index) ? (index = Int64(index)) : error(msg)
+
+        results[index] = result
+
         completed_tasks += 1
-
         # Send a new task to the worker that just finished.
         if tasks_sent < num_tasks
             task = tasks[tasks_sent + 1]
-
             verbose && println("$(ctime()): sending task $task to worker $worker_rank.")
-
-            MPI.send(task, comm, dest=worker_rank, tag=0)
+            MPI.send([tasks_sent + 1, task], comm; dest=worker_rank, tag=0)
             tasks_sent += 1
         end
     end
 
     # All tasks have been completed, send a stop signal.
     for i in 1:num_workers
-        MPI.send(STOP, comm, dest=i, tag=0)
+        MPI.send(STOP, comm; dest=i, tag=0)
     end
 
     return results
@@ -88,7 +94,7 @@ end
 
 
 """
-    work_delegation(func::Function, tasks::Vector{<:Any}, comm::MPI.Comm;
+    work_delegation(func::Function, tasks::Vector{<:Real}, comm::MPI.Comm;
                     master_verbose::Bool=true, worker_verbose::Bool=false)
 
 Distributes tasks among the available MPI processes. If there's only one process, it will
@@ -114,7 +120,7 @@ execute all tasks.
     through MPI.
 - If there's only one process, it returns a vector with the results of all tasks.
 """
-function work_delegation(func::Function, tasks::Vector{<:Any}, comm::MPI.Comm;
+function work_delegation(func::Function, tasks::Vector{<:Real}, comm::MPI.Comm;
                          master_verbose::Bool=true, worker_verbose::Bool=false)
     if MPI.Comm_size(comm) > 1
         if MPI.Comm_rank(comm) == 0
