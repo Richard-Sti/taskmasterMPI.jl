@@ -48,7 +48,10 @@ The `TaskmasterMPI` package requires the following dependencies:
 The primary function in `TaskmasterMPI.jl` is `work_delegation()`. This function delegates tasks for parallel evaluation using MPI.
 
 ```julia
+using MPI
 using TaskmasterMPI
+
+MPI.Init()
 
 # Define a function to be run on each task
 function f(x)
@@ -66,6 +69,8 @@ if MPI.Comm_rank(MPI.COMM_WORLD) == 0
     println("Results:")
     @show res
 end
+
+MPI.Finalize()
 ```
 
 Please refer to inline documentation for detailed function parameters and usage. Similar example is included in the script `example.jl`.
