@@ -23,23 +23,24 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 
 function f(x)
-    sleep(0.5 * rand())
+    sleep(0.1 * rand())
     return [x, x^0.5]
 end
 
-tasks = Vector(1:10)
+tasks = Vector(3:100)
 res = work_delegation(f, tasks, comm)
 
 if rank == 0
-    println("The results are a vector of vectors:")
+    # println("The results are a vector of vectors:")
+    println("The results when all is finished:")
     @show res
 
-    df = DataFrame(x = [r[1] for r in res], sqrtx = [r[2] for r in res])
+    # df = DataFrame(x = [r[1] for r in res], sqrtx = [r[2] for r in res])
 
-    println("Results converted to a DataFrame:")
-    @show df
+    # println("Results converted to a DataFrame:")
+    # @show df
 
-    println("We're all done!")
+    # println("We're all done!")
 end
 
 MPI.Finalize()
