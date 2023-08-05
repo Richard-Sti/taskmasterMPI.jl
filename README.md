@@ -70,19 +70,6 @@ end
 
 Please refer to inline documentation for detailed function parameters and usage. Similar example is included in the script `example.jl`.
 
-### Function Explanation: `work_delegation`
-
-The `work_delegation` function is designed to delegate tasks for parallel processing using MPI.
-
-#### Output:
-
-The function returns a `Vector{Vector{Any}}`, which is essentially a list of vectors. Each inner vector represents the result of a single task. For instance, if you pass in a list of 10 tasks, the function will return a list of 10 vectors, with each inner vector being the output of its corresponding task.
-
-#### Task Requirements:
-
-Each task should be a function that, when executed, returns a vector. This is a strict requirement, and even if there's no explicit output from a task, it should return an empty vector (`[]`). This ensures consistency in the output format, making post-processing and data extraction simpler.
-
-
 ## Authors
 
 - **Richard Stiskalek** ([richard.stiskalek@protonmail.com](mailto:richard.stiskalek@protonmail.com))
