@@ -19,9 +19,7 @@ const STOP = "__STOP__"
 ctime() = Dates.format(now(), "HH:MM:SS")
 
 
-function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
-    rank = MPI.Comm_rank(comm)
-
+function worker_process(func::Function, comm::MPI.Comm)
     while true
         # Receive a task from the master or stop signal.
         task = MPI.recv(comm; source=0, tag=0)
@@ -32,15 +30,13 @@ function worker_process(func::Function, comm::MPI.Comm; verbose::Bool=false)
 
         index, task = task
 
-        verbose && println("$(ctime()): rank $rank received task $task.")
-
         result = func(task)
         MPI.send([index, result], comm; dest=0, tag=1)
     end
 end
 
 
-function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Bool=false)
+function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Int=1)
     num_workers = MPI.Comm_size(comm) - 1
     num_tasks = length(tasks)
     completed_tasks = 0
@@ -52,7 +48,11 @@ function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Bool=fal
     # Initially distribute tasks to workers
     for worker_rank = 1:min(num_workers, num_tasks)
         task = tasks[worker_rank]
-        verbose && println("$(ctime()): sending task $task to worker $worker_rank.")
+
+        if (verbose > 0) && ((tasks_sent + 1) % verbose == 0)
+            println("$(ctime()): sending task $task to worker $worker_rank.")
+        end
+
         MPI.send([worker_rank, task], comm; dest=worker_rank, tag=0)
         tasks_sent += 1
     end
@@ -62,7 +62,9 @@ function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Bool=fal
         status = MPI.Probe(MPI.ANY_SOURCE, 1, comm)
         worker_rank = status.source
 
-        verbose && println("$(ctime()): receiving from worker $worker_rank.")
+        if (verbose > 0) && ((completed_tasks + 1) % verbose == 0)
+            println("$(ctime()): receiving from worker $worker_rank.")
+        end
 
         result = MPI.recv(comm; source=worker_rank, tag=1)
         index, result = result
@@ -78,7 +80,11 @@ function master_process(tasks::Vector{<:Real}, comm::MPI.Comm; verbose::Bool=fal
         # Send a new task to the worker that just finished.
         if tasks_sent < num_tasks
             task = tasks[tasks_sent + 1]
-            verbose && println("$(ctime()): sending task $task to worker $worker_rank.")
+
+            if (verbose > 0) && ((tasks_sent + 1) % verbose == 0)
+                println("$(ctime()): sending task $task to worker $worker_rank.")
+            end
+
             MPI.send([tasks_sent + 1, task], comm; dest=worker_rank, tag=0)
             tasks_sent += 1
         end
@@ -95,7 +101,7 @@ end
 
 """
     work_delegation(func::Function, tasks::Vector{<:Real}, comm::MPI.Comm;
-                    master_verbose::Bool=true, worker_verbose::Bool=false)
+                    master_verbose::Bool=true)
 
 Distributes tasks among the available MPI processes. If there's only one process, it will
 execute all tasks.
@@ -109,10 +115,8 @@ execute all tasks.
 - `comm`: The MPI communicator that handles the processes.
 
 # Keyword Arguments
-- `master_verbose`: If true, the master process will print a message each time it completes
-    a task. Default is true.
-- `worker_verbose`: If true, the worker processes will print a message each time they complete
-    a task. Default is false.
+- `master_verbose::Int`: The master process will print a message each time it completes
+    `master_verbose` tasks. Default is 1. If 0, no messages will be printed.
 
 # Returns
 - For the master process (rank 0), it returns the results of the tasks it has processed.
@@ -121,20 +125,24 @@ execute all tasks.
 - If there's only one process, it returns a vector with the results of all tasks.
 """
 function work_delegation(func::Function, tasks::Vector{<:Real}, comm::MPI.Comm;
-                         master_verbose::Bool=true, worker_verbose::Bool=false)
+                         master_verbose::Int=1)
     if MPI.Comm_size(comm) > 1
         if MPI.Comm_rank(comm) == 0
             return master_process(tasks, comm; verbose=master_verbose)
         else
-            worker_process(func, comm; verbose=worker_verbose)
+            worker_process(func, comm)
         end
     else
         results = Vector{Any}()
+        ntasks_completed = 0
         for task in tasks
-            master_verbose && println("$(ctime()): completing task $task.")
+            if (master_verbose > 0) && ((ntasks_completed + 1) % master_verbose == 0)
+                println("$(ctime()): completing task $task.")
+            end
 
             result_vector = func(task)
             push!(results, result_vector)
+            ntasks_completed += 1
         end
 
         return results
