@@ -29,7 +29,7 @@ end
 
 # tasks = Vector(3:100)
 tasks = Float64.(Vector(3:50))
-res = work_delegation(f, tasks, comm)
+res = work_delegation(f, tasks, comm; master_verbose=1)
 
 if rank == 0
     df = DataFrame(x = [r[1] for r in res], sqrtx = [r[2] for r in res])
